@@ -595,10 +595,30 @@ impl crate::RxStreamer for RxStreamer {
 
         let out =
             unsafe { std::slice::from_raw_parts_mut(buffers[0].as_mut_ptr() as *mut u8, n * is) };
-        self.reader
+        match self
+            .reader
             .as_mut()
             .unwrap()
-            .read_exact(&mut out[0..n * is])?;
+            .read_exact(&mut out[0..n * is])
+        {
+            Ok(()) => {}
+            Err(Json(Error(error_code, _, _))) => {
+                if error_code == "expected value" {
+                    warn!("received empty JSON from {}, ignoring.", self.url);
+                    panic!();
+                    // self.items_left = 0;
+                    return Ok(());
+                } else if error_code == "trailing characters" {
+                    warn!("received invalid JSON from {}, ignoring.", self.url);
+                    panic!();
+                    // self.items_left = 0;
+                    return Ok(());
+                } else {
+                    return Err(e);
+                }
+            }
+            other_error => return other_error,
+        }
 
         self.items_left -= n;
 
@@ -672,16 +692,16 @@ impl crate::TxStreamer for TxStreamer {
             )
         };
 
-        log::debug!(
-            "sending {}{} samples with delay of {}s",
-            if end_burst { "burst of " } else { "" },
-            num_streamable_samples,
-            start
-                - SystemTime::now()
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs_f64()
-        );
+        // log::debug!(
+        //     "sending {}{} samples with delay of {}s",
+        //     if end_burst { "burst of " } else { "" },
+        //     num_streamable_samples,
+        //     start
+        //         - SystemTime::now()
+        //             .duration_since(SystemTime::UNIX_EPOCH)
+        //             .unwrap()
+        //             .as_secs_f64()
+        // );
 
         let j = json!({
             "startTime": start,
